@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import { Quicksand } from 'next/font/google';
 import './globals.css';
 import { ThemeProvider } from '@/components/ui/theme-provider';
-import { Header } from '@/components/shared/header';
 import { Toaster } from '@/components/ui/sonner';
+import { Container } from '@/components/ui/container';
 
 const quicksand = Quicksand({
   variable: '--font-quicksand',
@@ -29,9 +29,8 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <Toaster />
-          <Header />
-          {children}
+          <Toaster position="top-center" duration={4000} />
+          <Container>{children}</Container>
         </ThemeProvider>
       </body>
     </html>

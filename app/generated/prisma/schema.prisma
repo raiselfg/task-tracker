@@ -9,20 +9,58 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String    @unique
-  emailVerified DateTime?
-  image         String?
+model Profile {
+  id        String  @id @db.Uuid
+  email     String
+  fullname  String? @map("full_name")
+  avatarUrl String? @map("avatar_url")
+  provider  String?
 
   // Relations
-  assignedTasks Task[]    @relation("Assignee")
-  createdTasks  Task[]    @relation("Creator")
-  comments      Comment[]
+  createdTasks  Task[]    @relation("Creator") // Задачи, созданные этим пользователем
+  assignedTasks Task[]    @relation("Assignee") // Задачи, назначенные на этого пользователя (опционально)
+  comments      Comment[] // Комментарии, оставленные этим пользователем
+
+  createdAt DateTime @default(now()) // Время создания
+  updatedAt DateTime @updatedAt // Время последнего обновления
+
+  @@map("profiles") // Маппинг на таблицу public.profiles
+}
+
+model Task {
+  id          String       @id @default(uuid())
+  title       String
+  description String
+  status      TaskStatus
+  priority    TaskPriority
+  creatorId   String       @db.Uuid
+  assigneeId  String?      @db.Uuid
+
+  creator  Profile   @relation("Creator", fields: [creatorId], references: [id])
+  assignee Profile?  @relation("Assignee", fields: [assigneeId], references: [id])
+  comments Comment[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  content   String
+  createdAt DateTime @default(now())
+
+  // Relations
+  user    Profile   @relation(fields: [userId], references: [id])
+  task    Task?     @relation(fields: [taskId], references: [id]) // Опционально, если комментарий — reply
+  parent  Comment?  @relation("Replies", fields: [parentId], references: [id])
+  replies Comment[] @relation("Replies") // Ответы на этот комментарий (вложенные)
+
+  userId   String  @db.Uuid // Уточнили тип для согласованности
+  taskId   String? // Соответствует Task.id (uuid string), опционально для replies
+  parentId String? // Ссылка на parent Comment.id (uuid string)
+
+  @@index([taskId]) // Индекс для поиска по taskId
+  @@index([parentId]) // Индекс для поиска по parentId (для threading)
 }
 
 enum TaskStatus {
@@ -35,33 +73,4 @@ enum TaskPriority {
   LOW
   MEDIUM
   HIGH
-}
-
-model Task {
-  id          String       @id @default(cuid())
-  title       String
-  description String?
-  status      TaskStatus   @default(TODO)
-  priority    TaskPriority @default(MEDIUM)
-  dueDate     DateTime?
-  createdAt   DateTime     @default(now())
-  creatorId   String
-  assigneeId  String?
-
-  // Relations
-  creator  User      @relation("Creator", fields: [creatorId], references: [id])
-  assignee User?     @relation("Assignee", fields: [assigneeId], references: [id])
-  comments Comment[]
-}
-
-model Comment {
-  id        String   @id @default(cuid())
-  content   String
-  userId    String
-  taskId    String
-  createdAt DateTime @default(now())
-
-  // Relations
-  user User @relation(fields: [userId], references: [id])
-  task Task @relation(fields: [taskId], references: [id])
 }
