@@ -14,11 +14,11 @@ import {
 import { useForm } from 'react-hook-form';
 import { loginSchema, LoginFormData } from '@/schemas/auth-schema';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { login } from '../../actions';
 import { LoginForm } from '@/components/auth/login-form';
 import { Field, FieldDescription } from '@/components/ui/field';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
+import { login } from '@/app/auth/actions';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -43,12 +43,12 @@ export default function LoginPage() {
       toast.error(`Login error: ${result.error}`);
     } else {
       toast.success('Login successful!');
-      setTimeout(() => router.push('/dashboard'), 10);
+      setTimeout(() => router.push('/'), 10);
     }
   };
 
   return (
-    <LoginForm className="absolute top-1/2 left-1/2 max-w-sm translate-[-50%]">
+    <LoginForm>
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
           <FormField
@@ -94,7 +94,7 @@ export default function LoginPage() {
               Login
             </Button>
             <FieldDescription className="text-center">
-              Don&apos;t have an account? <a href="sign-up">Sign up</a>
+              Don&apos;t have an account? <a href="/auth/sign-up">Sign up</a>
             </FieldDescription>
           </Field>
         </form>

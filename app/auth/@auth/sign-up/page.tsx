@@ -14,7 +14,7 @@ import {
 import { useForm } from 'react-hook-form';
 import { SignupFormData, signupSchema } from '@/schemas/auth-schema';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { signup } from '../../actions';
+import { signup } from '@/app/auth/actions';
 import { Field, FieldDescription } from '@/components/ui/field';
 import { SignupForm } from '@/components/auth/sign-up-form';
 import { toast } from 'sonner';
@@ -47,16 +47,13 @@ export default function LoginPage() {
       toast.error(`Signup error: ${result.error}`);
     } else {
       toast.success('Signup successful! Confrim your email with OTP code!');
-      setTimeout(
-        () =>
-          router.push(`otpVerify?email=${encodeURIComponent(values.email)}`),
-        10
-      );
+      localStorage.setItem('userEmail', values.email);
+      setTimeout(() => router.push('/auth/otpVerify'), 10);
     }
   };
 
   return (
-    <SignupForm className="absolute top-1/2 left-1/2 max-w-sm translate-[-50%]">
+    <SignupForm>
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
           <FormField
@@ -141,7 +138,7 @@ export default function LoginPage() {
               Create Account
             </Button>
             <FieldDescription className="text-center">
-              Already have an account? <a href="/login">Login</a>
+              Already have an account? <a href="/auth/login">Login</a>
             </FieldDescription>
           </Field>
         </form>

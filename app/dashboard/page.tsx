@@ -2,7 +2,6 @@ import { redirect } from 'next/navigation';
 
 import { createClient } from '@/lib/supabase/server';
 import { SignOutButton } from '@/components/auth/sign-out-button';
-import { Header } from '@/components/shared/header';
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -14,7 +13,6 @@ export default async function DashboardPage() {
 
   return (
     <>
-      <Header />
       <p>Hello {data.user.email}</p>
       <SignOutButton />
     </>

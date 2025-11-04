@@ -4,6 +4,8 @@ import './globals.css';
 import { ThemeProvider } from '@/components/ui/theme-provider';
 import { Toaster } from '@/components/ui/sonner';
 import { Container } from '@/components/ui/container';
+import { Suspense } from 'react';
+import { Header } from '@/components/shared/header';
 
 const quicksand = Quicksand({
   variable: '--font-quicksand',
@@ -19,6 +21,7 @@ export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
+  auth: React.ReactNode;
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
@@ -29,8 +32,13 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <Toaster position="top-center" duration={4000} />
-          <Container>{children}</Container>
+          <Toaster position="top-center" duration={3500} />
+          <Container>
+            <Suspense>
+              <Header />
+            </Suspense>
+            {children}
+          </Container>
         </ThemeProvider>
       </body>
     </html>

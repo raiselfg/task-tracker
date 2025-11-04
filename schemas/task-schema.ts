@@ -6,6 +6,11 @@ export const taskFormSchema = z.object({
   status: z.enum(['TODO', 'IN_PROGRESS', 'DONE']),
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH']),
   assigneeId: z.string().uuid('Invalid user ID').optional(),
+  dueDate: z
+    .date()
+    .min(new Date(), 'Due date must be in the future')
+    .optional(),
+  projectId: z.string().uuid('Invalid project ID'),
 });
 
 export type TaskFormType = z.infer<typeof taskFormSchema>;

@@ -1,12 +1,10 @@
-import { Header } from '@/components/shared/header';
-import { TaskList } from '@/components/task/task-list';
+import TaskList from '@/components/task/task-list';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Suspense } from 'react';
 
-export default function Home() {
+export default async function Home() {
   return (
     <>
-      <Header />
       <Suspense
         fallback={
           <div className="grid grid-cols-5 gap-2">

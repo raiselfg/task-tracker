@@ -130,14 +130,30 @@ exports.Prisma.ProfileScalarFieldEnum = {
   updatedAt: 'updatedAt'
 };
 
+exports.Prisma.ProjectScalarFieldEnum = {
+  id: 'id',
+  name: 'name',
+  description: 'description',
+  ownerId: 'ownerId',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.ProjectMemberScalarFieldEnum = {
+  id: 'id',
+  projectId: 'projectId',
+  userId: 'userId',
+  role: 'role'
+};
+
 exports.Prisma.TaskScalarFieldEnum = {
   id: 'id',
   title: 'title',
   description: 'description',
   status: 'status',
   priority: 'priority',
-  creatorId: 'creatorId',
   assigneeId: 'assigneeId',
+  projectId: 'projectId',
+  dueDate: 'dueDate',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 };
@@ -145,10 +161,18 @@ exports.Prisma.TaskScalarFieldEnum = {
 exports.Prisma.CommentScalarFieldEnum = {
   id: 'id',
   content: 'content',
-  createdAt: 'createdAt',
   userId: 'userId',
   taskId: 'taskId',
-  parentId: 'parentId'
+  parentId: 'parentId',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.AttachmentScalarFieldEnum = {
+  id: 'id',
+  fileUrl: 'fileUrl',
+  taskId: 'taskId',
+  userId: 'userId',
+  createdAt: 'createdAt'
 };
 
 exports.Prisma.SortOrder = {
@@ -165,13 +189,19 @@ exports.Prisma.NullsOrder = {
   first: 'first',
   last: 'last'
 };
-exports.TaskStatus = exports.$Enums.TaskStatus = {
+exports.Role = exports.$Enums.Role = {
+  ADMIN: 'ADMIN',
+  MEMBER: 'MEMBER',
+  VIEWER: 'VIEWER'
+};
+
+exports.Status = exports.$Enums.Status = {
   TODO: 'TODO',
   IN_PROGRESS: 'IN_PROGRESS',
   DONE: 'DONE'
 };
 
-exports.TaskPriority = exports.$Enums.TaskPriority = {
+exports.Priority = exports.$Enums.Priority = {
   LOW: 'LOW',
   MEDIUM: 'MEDIUM',
   HIGH: 'HIGH'
@@ -179,8 +209,11 @@ exports.TaskPriority = exports.$Enums.TaskPriority = {
 
 exports.Prisma.ModelName = {
   Profile: 'Profile',
+  Project: 'Project',
+  ProjectMember: 'ProjectMember',
   Task: 'Task',
-  Comment: 'Comment'
+  Comment: 'Comment',
+  Attachment: 'Attachment'
 };
 
 /**

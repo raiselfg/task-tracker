@@ -17,9 +17,11 @@ model Profile {
   provider  String?
 
   // Relations
-  createdTasks  Task[]    @relation("Creator") // Задачи, созданные этим пользователем
-  assignedTasks Task[]    @relation("Assignee") // Задачи, назначенные на этого пользователя (опционально)
-  comments      Comment[] // Комментарии, оставленные этим пользователем
+  projectsOwned  Project[]       @relation("OwnedProjects")
+  projectMembers ProjectMember[]
+  tasksAssigned  Task[]          @relation("AssignedTasks")
+  comments       Comment[]
+  attachments    Attachment[] // Комментарии, оставленные этим пользователем
 
   createdAt DateTime @default(now()) // Время создания
   updatedAt DateTime @updatedAt // Время последнего обновления
@@ -27,49 +29,88 @@ model Profile {
   @@map("profiles") // Маппинг на таблицу public.profiles
 }
 
+model Project {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String
+  description String?
+  ownerId     String   @db.Uuid
+  createdAt   DateTime @default(now())
+
+  owner   Profile         @relation("OwnedProjects", fields: [ownerId], references: [id])
+  members ProjectMember[]
+  tasks   Task[]
+}
+
+model ProjectMember {
+  id        String @id @default(uuid()) @db.Uuid
+  projectId String @db.Uuid
+  userId    String @db.Uuid
+  role      Role   @default(MEMBER)
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+}
+
 model Task {
-  id          String       @id @default(uuid())
+  id          String    @id @default(uuid()) @db.Uuid
   title       String
-  description String
-  status      TaskStatus
-  priority    TaskPriority
-  creatorId   String       @db.Uuid
-  assigneeId  String?      @db.Uuid
+  description String?
+  status      Status    @default(TODO)
+  priority    Priority  @default(MEDIUM)
+  assigneeId  String?   @db.Uuid
+  projectId   String    @db.Uuid
+  dueDate     DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
-  creator  Profile   @relation("Creator", fields: [creatorId], references: [id])
-  assignee Profile?  @relation("Assignee", fields: [assigneeId], references: [id])
-  comments Comment[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  assignee    Profile?     @relation("AssignedTasks", fields: [assigneeId], references: [id])
+  project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  comments    Comment[]
+  attachments Attachment[]
 }
 
 model Comment {
-  id        String   @id @default(uuid())
+  id        String   @id @default(uuid()) @db.Uuid
   content   String
+  userId    String   @db.Uuid
+  taskId    String   @db.Uuid
+  parentId  String?  @db.Uuid // Новое поле для родительского комментария
   createdAt DateTime @default(now())
 
-  // Relations
-  user    Profile   @relation(fields: [userId], references: [id])
-  task    Task?     @relation(fields: [taskId], references: [id]) // Опционально, если комментарий — reply
-  parent  Comment?  @relation("Replies", fields: [parentId], references: [id])
-  replies Comment[] @relation("Replies") // Ответы на этот комментарий (вложенные)
+  user    Profile   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  task    Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  parent  Comment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade) // Self-relation: родитель
+  replies Comment[] @relation("CommentReplies") // Self-relation: ответы (дети)
 
-  userId   String  @db.Uuid // Уточнили тип для согласованности
-  taskId   String? // Соответствует Task.id (uuid string), опционально для replies
-  parentId String? // Ссылка на parent Comment.id (uuid string)
-
-  @@index([taskId]) // Индекс для поиска по taskId
-  @@index([parentId]) // Индекс для поиска по parentId (для threading)
+  @@index([parentId]) // Индекс для быстрого поиска по parentId
 }
 
-enum TaskStatus {
+model Attachment {
+  id        String   @id @default(uuid()) @db.Uuid
+  fileUrl   String
+  taskId    String   @db.Uuid
+  userId    String   @db.Uuid
+  createdAt DateTime @default(now())
+
+  user Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+  task Task    @relation(fields: [taskId], references: [id], onDelete: Cascade)
+}
+
+enum Role {
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+enum Status {
   TODO
   IN_PROGRESS
   DONE
 }
 
-enum TaskPriority {
+enum Priority {
   LOW
   MEDIUM
   HIGH
