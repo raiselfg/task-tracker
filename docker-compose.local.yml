@@ -1,0 +1,23 @@
+# Start: docker compose -f docker-compose.local.yml up -d
+# Application settings remain DATABASE_URL.
+# With the default LOCAL_ values, use:
+# DATABASE_URL=postgresql://auth:auth@localhost:5432/auth
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: ${LOCAL_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${LOCAL_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${LOCAL_POSTGRES_DB}
+    ports:
+      - "127.0.0.1:${LOCAL_POSTGRES_PORT}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_data:
