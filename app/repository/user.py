@@ -18,5 +18,14 @@ class UserRepository:
     async def by_id(self, user_id: UUID) -> User | None:
         return await self.db.get(User, user_id)
 
+    async def by_ids(self, user_ids: list[UUID]) -> list[User]:
+        stmt = (
+            select(User)
+            .where(User.id.in_(user_ids))
+            .order_by(User.login, User.id)
+        )
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
+
     def add(self, user: User) -> None:
         self.db.add(user)

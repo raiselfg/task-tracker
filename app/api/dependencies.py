@@ -8,6 +8,8 @@ from app.core.config import Settings
 from app.core.security import utc_now
 from app.db.session import get_db
 from app.services.auth import AuthenticationRequiredError, AuthService, CurrentSession
+from app.services.group import GroupService
+from app.services.task import TaskService
 
 
 def get_app_settings(request: Request) -> Settings:
@@ -25,6 +27,20 @@ def get_auth_service(
 
 
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
+
+
+def get_group_service(session: Annotated[AsyncSession, Depends(get_db)]) -> GroupService:
+    return GroupService(session)
+
+
+GroupServiceDep = Annotated[GroupService, Depends(get_group_service)]
+
+
+def get_task_service(session: Annotated[AsyncSession, Depends(get_db)]) -> TaskService:
+    return TaskService(session)
+
+
+TaskServiceDep = Annotated[TaskService, Depends(get_task_service)]
 
 
 def get_session_token(request: Request, settings: SettingsDep) -> str | None:
