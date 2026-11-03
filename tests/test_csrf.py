@@ -45,6 +45,13 @@ async def test_csrf_bootstrap_is_uncached_and_does_not_create_a_session(browser,
         ("POST", "/api/v1/auth/register"),
         ("POST", "/api/v1/auth/logout"),
         ("POST", "/api/v1/tasks"),
+        ("POST", "/api/v1/checklists"),
+        ("POST", "/api/v1/checklists/00000000-0000-0000-0000-000000000001/items"),
+        (
+            "PATCH",
+            "/api/v1/checklists/00000000-0000-0000-0000-000000000001"
+            "/items/00000000-0000-0000-0000-000000000002",
+        ),
         ("PATCH", "/api/v1/tasks/00000000-0000-0000-0000-000000000001"),
         ("DELETE", "/api/v1/groups/00000000-0000-0000-0000-000000000001"),
         ("POST", "/api/v1/invitations/test-token/accept"),

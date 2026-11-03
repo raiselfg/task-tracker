@@ -8,6 +8,7 @@ from app.core.config import Settings
 from app.core.security import utc_now
 from app.db.session import get_db
 from app.services.auth import AuthenticationRequiredError, AuthService, CurrentSession
+from app.services.checklist import ChecklistService
 from app.services.group import GroupService
 from app.services.task import TaskService
 
@@ -41,6 +42,13 @@ def get_task_service(session: Annotated[AsyncSession, Depends(get_db)]) -> TaskS
 
 
 TaskServiceDep = Annotated[TaskService, Depends(get_task_service)]
+
+
+def get_checklist_service(session: Annotated[AsyncSession, Depends(get_db)]) -> ChecklistService:
+    return ChecklistService(session)
+
+
+ChecklistServiceDep = Annotated[ChecklistService, Depends(get_checklist_service)]
 
 
 def get_session_token(request: Request, settings: SettingsDep) -> str | None:
