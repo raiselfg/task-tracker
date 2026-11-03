@@ -7,6 +7,7 @@ from uuid import UUID, uuid4
 
 import httpx
 import pytest
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select
 
 import app.core.config as config_module
@@ -16,6 +17,7 @@ from app.models.task import Task, TaskStatus
 from app.schemas.task import TaskCreate, TaskUpdate
 from app.services.group import GroupNotFoundError, GroupService, InvitationNotFoundError
 from app.services.task import TaskCompletedError, TaskService
+from tests.fakes import enable_csrf
 from tests.test_auth_integration import (
     database as database,
 )
@@ -46,15 +48,21 @@ async def clients(settings, accounts, monkeypatch):
     from app.main import app
 
     monkeypatch.setattr(app.state, "settings", settings)
+    cors = next(item for item in app.user_middleware if item.cls is CORSMiddleware)
+    monkeypatch.setitem(cors.kwargs, "allow_origins", settings.allowed_origins)
+    monkeypatch.setattr(app, "middleware_stack", None)
     monkeypatch.setattr(app, "dependency_overrides", {})
     async with app.router.lifespan_context(app), AsyncExitStack() as stack:
         clients = []
         for account in accounts:
             client = await stack.enter_async_context(
                 httpx.AsyncClient(
-                    transport=httpx.ASGITransport(app=app), base_url="https://api.example.com"
+                    transport=httpx.ASGITransport(app=app),
+                    base_url="https://api.example.com",
+                    headers={"Origin": settings.allowed_origins[0]},
                 )
             )
+            enable_csrf(client)
             response = await client.post(
                 "/api/v1/auth/login", json={"login": account.login, "password": "secret"}
             )
@@ -371,6 +379,7 @@ async def test_tracker_requires_authentication(clients, group):
     invitation = (await owner.post(f"/api/v1/groups/{group['id']}/invitation")).json()
     task = (await owner.post("/api/v1/tasks", json={"title": "Private"})).json()
     async with httpx.AsyncClient(transport=owner._transport, base_url=owner.base_url) as anonymous:
+        enable_csrf(anonymous)
         for method, path, body in [
             ("GET", "/api/v1/tasks", None),
             ("POST", "/api/v1/tasks", {"title": "Forbidden"}),

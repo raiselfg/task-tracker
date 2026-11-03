@@ -40,6 +40,7 @@ async def test_readiness_reports_real_asyncpg_connection_refusal():
             allowed_origins=["http://localhost:3000"],
             allow_insecure_cookies=True,
             session_ttl_seconds=60,
+            csrf_secret="test-csrf-secret-for-tests-only-32-characters",
         )
         database = create_database(settings)
         app = FastAPI()

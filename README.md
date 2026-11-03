@@ -2,18 +2,120 @@
 
 FastAPI, PostgreSQL, SQLAlchemy и Alembic. Точка входа — `app.main:app`.
 Авторизация использует существующую сессионную cookie; все API задач, групп
-и приглашений требуют входа. Схемы запросов и ответов доступны в `/docs`.
+и приглашений требуют входа. В development схемы доступны в `/docs`;
+в production `/docs`, `/redoc` и `/openapi.json` отключены.
 
 ## Запуск
 
 Установить зависимости через `uv sync`, настроить `.env` по `.env.example`
 и запустить PostgreSQL через `docker compose -f docker-compose.local.yml up -d`.
+Сгенерировать `CSRF_SECRET` и заменить placeholder в `.env`:
+
+```bash
+uv run python -c 'import secrets; print(secrets.token_urlsafe(32))'
+```
+
 Перед запуском приложения применить миграции:
 
 ```bash
 uv run alembic upgrade head
 uv run uvicorn app.main:app --reload
 ```
+
+## Production: сайт и API на разных доменах
+
+Например, сайт — `https://frontend.example.org`, API — `https://api.example.net`.
+Оба адреса должны использовать HTTPS. Подготовьте окружение по
+`.env.production.example` и передайте настройки через секреты хостинга или `.env`
+в каталоге деплоя:
+
+```dotenv
+APP_ENV=production
+DATABASE_URL=postgresql://USER:PASSWORD@DB_HOST:5432/task_tracker
+ALLOWED_ORIGINS=["https://frontend.example.org"]
+ALLOW_INSECURE_COOKIES=false
+COOKIE_SAMESITE=none
+COOKIE_PARTITIONED=true
+SESSION_TTL_SECONDS=2592000
+CSRF_SECRET=<случайное значение secrets.token_urlsafe(32)>
+```
+
+`ALLOWED_ORIGINS` содержит точные origin сайта, без путей и завершающего `/`.
+Wildcard запрещён. Секрет CSRF должен быть одинаковым у всех API-процессов и
+сохраняться между перезапусками; короткие значения и placeholder отклоняются.
+Смена секрета инвалидирует ранее выданные CSRF-токены: клиент получает 403 и
+может явно повторить действие с новым токеном. Записи автоматически не повторяются.
+Настройте подключение и TLS PostgreSQL по требованиям вашего провайдера.
+
+Установка зафиксированных runtime-зависимостей и запуск на сервере с локальным
+HTTPS-ingress/Nginx:
+
+```bash
+uv sync --frozen --no-dev
+uv run --no-sync alembic upgrade head
+uv run --no-sync uvicorn app.main:app --host 127.0.0.1 --port 8000 \
+  --proxy-headers --forwarded-allow-ips 127.0.0.1 --no-access-log
+```
+
+Миграции выполняются один раз перед запуском процессов, не в каждом worker.
+Для нескольких процессов можно использовать штатный `WEB_CONCURRENCY` uvicorn;
+учитывайте отдельный пул соединений PostgreSQL в каждом процессе.
+`--reload` в production не используется. Запускайте приложение от непривилегированного
+пользователя под процесс-менеджером хостинга/systemd с перезапуском при сбоях.
+
+HTTPS завершается на API-домене в ingress/балансировщике. Для примера выше
+он передаёт запросы локальному uvicorn; forwarded-заголовки принимаются только
+от loopback. Если ingress находится в другой сети, задайте его доверенные адреса
+и слушайте приватный интерфейс согласно настройкам платформы.
+Браузер обращается к API-домену напрямую, фронтенд-прокси не нужен.
+
+Access log отключён, поскольку URL приглашения содержит секретный токен.
+Также исключите такие URL, cookie и заголовки CSRF из журналов ingress/CDN.
+Проверки состояния: `/health` — процесс, `/ready` — доступность PostgreSQL;
+оба доступны без сессии и CSRF. Контейнеры, БД и реальные домены автоматически
+не развёртываются.
+
+### Cookie и ограничения браузеров
+
+Сессионная cookie — `__Host-session`: HttpOnly, Secure, Path=/, без Domain.
+Те же атрибуты используются для cookie CSRF. `COOKIE_SAMESITE=none` разрешает
+cross-site запросы; `COOKIE_PARTITIONED=true` включает CHIPS и привязывает cookie
+к сайту, из которого открыт API. Одна сессия не разделяется между разными
+корневыми доменами сайтов. Удаление cookie сохраняет их атрибуты.
+Для локального HTTP оставьте `COOKIE_SAMESITE=lax`, `COOKIE_PARTITIONED=false`
+и явное `ALLOW_INSECURE_COOKIES=true`, как в `.env.example`.
+
+Поддержка зависит от браузера и его политики хранения. CHIPS предназначен для
+такой связи сайта и стороннего API, но не гарантирует работу при полном запрете
+cookie или в старых браузерах. Проверьте вход и восстановление сессии в целевых
+Safari/Firefox/Chromium на реальных HTTPS-доменах. См.
+[MDN: сторонние cookie и CHIPS](https://developer.mozilla.org/en-US/docs/Web/Privacy/Guides/Third-party_cookies).
+
+### CSRF-протокол для фронтенда и API-клиентов
+
+1. Выполнить `GET /api/v1/auth/csrf` с `credentials: include`. Ответ
+   `{"csrf_token": "..."}` имеет `Cache-Control: no-store`; API устанавливает
+   HttpOnly cookie `__Host-csrf` (на локальном HTTP — `csrf`). Вход не требуется.
+2. Передавать значение в `X-CSRF-Token` на **каждом** POST/PUT/PATCH/DELETE,
+   включая регистрацию, вход, выход и приглашения. Cookie отправляется автоматически.
+3. После смены сессии получить новый токен. Токен хранится только в памяти
+   фронтенда, не в localStorage, URL или логах.
+
+Используется подписанный double-submit: HMAC связывает случайный nonce cookie
+с сессионной cookie и `CSRF_SECRET`. Сессионный токен не возвращается JavaScript.
+Origin, если передан, дополнительно проверяется по `ALLOWED_ORIGINS`.
+Запрос без корректной пары cookie/токен получает 403 до вызова сценария сервиса.
+Проверка CORS разрешает `X-CSRF-Token` и credentials только доверенным сайтам.
+Новые таблицы и миграции для CSRF не требуются; доступ к бизнес-данным остаётся
+в существующих сервисах и репозиториях. Основание —
+[OWASP: signed double-submit](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html#signed-double-submit-cookie-recommended).
+
+Во фронтенде настроить `VITE_API_URL=https://api.example.net/api/v1` и пересобрать
+его. Получение CSRF-токена, отправка заголовка и сброс при смене аккаунта уже
+реализованы через hooks ofetch.
+Обновляйте API и фронтенд согласованно: старые сборки без CSRF-заголовка
+получат 403 на записи, в том числе на входе. Уже открытым PWA нужно принять
+обновление интерфейса.
 
 ## Задачи
 
@@ -117,3 +219,16 @@ uv run ruff check app tests
 на **отдельную тестовую PostgreSQL БД**. Они применяют миграции через Alembic
 и удаляют созданные тестовые данные. Без этой переменной интеграционные тесты
 пропускаются. Обычный `DATABASE_URL` вместо неё не используется.
+
+Проверка production-подготовки 2 ноября 2026 года: 51 целевой тест CSRF, HTTP и
+интеграционных сценариев прошёл на одноразовой PostgreSQL с `SameSite=None`,
+`Partitioned` и разными origin сайта/API. Проверен отдельный production-запуск
+ASGI-приложения: `/ready`, отключённые docs/OpenAPI и CORS выдачи CSRF-токена.
+Это не браузерная проверка на реальных HTTPS-доменах и не выполненный деплой.
+
+Полный pytest: 142 passed, 8 failed. Восемь ошибок формата логина воспроизводятся
+на исходной версии до этой задачи: тесты ожидают ограничения, отсутствующие в
+`Credentials`. Бизнес-правила логина здесь не менялись. Ruff также сообщает об
+одной ранее существовавшей ошибке I001 (лишний перенос перед `settings` в
+`app/main.py`); новых ошибок Ruff нет. На фронтенде прошли 15 тестов,
+проверка типов, lint и сборка; прежние предупреждения Zod/размера чанка остаются.

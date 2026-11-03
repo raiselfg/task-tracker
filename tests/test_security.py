@@ -24,6 +24,7 @@ BASE_SETTINGS = dict(
     allowed_origins=["http://localhost:3000"],
     allow_insecure_cookies=False,
     session_ttl_seconds=2592000,
+    csrf_secret="test-csrf-secret-for-tests-only-32-characters",
 )
 
 

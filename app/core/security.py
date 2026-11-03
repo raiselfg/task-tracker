@@ -1,4 +1,5 @@
 import hashlib
+import hmac
 import re
 import secrets
 from datetime import UTC, datetime
@@ -22,6 +23,22 @@ def token_hash(token: str) -> str:
 
 def valid_token(token: str) -> bool:
     return re.fullmatch(r"[A-Za-z0-9_-]{43}", token) is not None
+
+
+def create_csrf_token(secret: str, session_token: str | None, nonce: str) -> str:
+    session_token = session_token or ""
+    message = f"csrf-v1!{len(session_token)}!{session_token}!{len(nonce)}!{nonce}".encode()
+    signature = hmac.new(secret.encode(), message, hashlib.sha256).hexdigest()
+    return f"{nonce}.{signature}"
+
+
+def verify_csrf_token(
+    secret: str, session_token: str | None, nonce: str | None, token: str | None
+) -> bool:
+    if nonce is None or not valid_token(nonce) or token is None:
+        return False
+    expected = create_csrf_token(secret, session_token, nonce)
+    return hmac.compare_digest(token.encode(), expected.encode())
 
 
 password_hasher = PasswordHasher(time_cost=2, memory_cost=19456, parallelism=1)

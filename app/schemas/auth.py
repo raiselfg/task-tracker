@@ -6,3 +6,7 @@ class Credentials(BaseModel):
     
     login: str = Field(min_length=3, max_length=32)
     password: SecretStr = Field(min_length=6, max_length=128)
+
+
+class CsrfTokenRead(BaseModel):
+    csrf_token: str

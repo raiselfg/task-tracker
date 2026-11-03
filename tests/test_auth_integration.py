@@ -9,6 +9,7 @@ from uuid import UUID, uuid4
 
 import httpx
 import pytest
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import delete, select
 
 import app.core.config as config_module
@@ -23,7 +24,7 @@ from app.services.auth import (
     InvalidCredentialsError,
     LoginAlreadyExistsError,
 )
-from tests.fakes import make_settings
+from tests.fakes import enable_csrf, make_settings
 
 pytestmark = pytest.mark.skipif(
     not os.getenv("AUTH_TEST_DATABASE_URL"),
@@ -33,7 +34,13 @@ pytestmark = pytest.mark.skipif(
 
 @pytest.fixture(scope="module")
 def settings():
-    return make_settings(database_url=os.environ["AUTH_TEST_DATABASE_URL"])
+    return make_settings(
+        database_url=os.environ["AUTH_TEST_DATABASE_URL"],
+        app_env="production",
+        allowed_origins=["https://frontend.example.org"],
+        cookie_samesite="none",
+        cookie_partitioned=True,
+    )
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -45,6 +52,9 @@ def migrate_database(settings):
         "ALLOWED_ORIGINS": json.dumps(settings.allowed_origins),
         "ALLOW_INSECURE_COOKIES": "false",
         "SESSION_TTL_SECONDS": str(settings.session_ttl_seconds),
+        "CSRF_SECRET": settings.csrf_secret.get_secret_value(),
+        "COOKIE_SAMESITE": settings.cookie_samesite,
+        "COOKIE_PARTITIONED": "true",
     }
     subprocess.run([sys.executable, "-m", "alembic", "upgrade", "head"], env=env, check=True)
 
@@ -87,28 +97,39 @@ async def test_full_http_flow_with_postgresql(settings, database, monkeypatch):
     from app.main import app
 
     monkeypatch.setattr(app.state, "settings", settings)
+    cors = next(item for item in app.user_middleware if item.cls is CORSMiddleware)
+    monkeypatch.setitem(cors.kwargs, "allow_origins", settings.allowed_origins)
+    monkeypatch.setattr(app, "middleware_stack", None)
     body = {"login": "test_" + uuid4().hex[:20], "password": "secret"}
     user_id = None
     try:
         async with app.router.lifespan_context(app):
             async with httpx.AsyncClient(
-                transport=httpx.ASGITransport(app=app), base_url="https://api.example.com"
+                transport=httpx.ASGITransport(app=app),
+                base_url="https://api.example.com",
+                headers={"Origin": settings.allowed_origins[0]},
             ) as client:
+                enable_csrf(client)
                 assert (await client.get("/ready")).status_code == 200
                 response = await client.post("/api/v1/auth/register", json=body)
                 assert response.status_code == 201
                 user_id = response.json()["id"]
-                assert not client.cookies
+                assert client.cookies.get("__Host-session") is None
                 assert (await client.get("/api/v1/auth/me")).status_code == 401
                 assert (await client.post("/api/v1/auth/register", json=body)).status_code == 409
-                assert (await client.post("/api/v1/auth/login", json=body)).status_code == 200
+                login = await client.post("/api/v1/auth/login", json=body)
+                assert login.status_code == 200
+                assert login.headers["access-control-allow-origin"] == settings.allowed_origins[0]
+                assert login.headers["access-control-allow-credentials"] == "true"
+                assert "SameSite=none" in login.headers["set-cookie"]
+                assert "Partitioned" in login.headers["set-cookie"]
                 token = client.cookies.get("__Host-session")
                 response = await client.get("/api/v1/auth/me")
                 assert response.json()["id"] == user_id
                 response = await client.post("/api/v1/auth/logout")
                 assert response.status_code == 204
                 assert response.content == b""
-                assert len(response.headers.get_list("set-cookie")) == 1
+                assert len(response.headers.get_list("set-cookie")) == 2
                 assert client.cookies.get("__Host-session") is None
                 response = await client.get(
                     "/api/v1/auth/me", headers={"Cookie": f"__Host-session={token}"}

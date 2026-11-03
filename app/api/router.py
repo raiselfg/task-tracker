@@ -1,13 +1,14 @@
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from app.api.csrf import validate_csrf
 from app.api.routers.auth import router as auth_router
 from app.api.routers.groups import router as groups_router
 from app.api.routers.invitations import router as invitations_router
 from app.api.routers.tasks import router as tasks_router
 
-api_router = APIRouter(prefix="/api/v1")
+api_router = APIRouter(prefix="/api/v1", dependencies=[Depends(validate_csrf)])
 api_router.include_router(auth_router)
 api_router.include_router(groups_router)
 api_router.include_router(invitations_router)

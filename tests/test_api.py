@@ -15,7 +15,7 @@ from app.services.auth import (
     InvalidCredentialsError,
     LoginAlreadyExistsError,
 )
-from tests.fakes import make_settings
+from tests.fakes import enable_csrf, make_settings
 
 ORIGIN = "https://app.example.com"
 HEADERS = {"Origin": ORIGIN}
@@ -54,6 +54,7 @@ async def client(application):
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=application), base_url="https://api.example.com"
     ) as client:
+        enable_csrf(client)
         yield client
 
 
@@ -61,7 +62,7 @@ async def test_registration_does_not_automatically_login(client, auth_service):
     response = await client.post("/api/v1/auth/register", json=BODY, headers=HEADERS)
     assert response.status_code == 201
     assert set(response.json()) == {"id", "login", "created_at"}
-    assert not client.cookies
+    assert client.cookies.get("__Host-session") is None
     auth_service.register.assert_awaited_once_with("User", "secret")
     auth_service.login.assert_not_awaited()
 
@@ -76,9 +77,11 @@ async def test_login_sets_cookie(client, auth_service):
     auth_service.login.assert_awaited_once_with("User", "secret")
 
 
-async def test_registration_does_not_require_origin_or_csrf_header(client):
+async def test_registration_requires_csrf_token(client, auth_service):
+    client.event_hooks["request"].clear()
     response = await client.post("/api/v1/auth/register", json=BODY)
-    assert response.status_code == 201
+    assert response.status_code == 403
+    auth_service.register.assert_not_awaited()
 
 
 async def test_invalid_body_uses_fastapi_validation(client, auth_service):
@@ -103,7 +106,7 @@ async def test_cors_preflight(client):
         headers={
             "Origin": ORIGIN,
             "Access-Control-Request-Method": "POST",
-            "Access-Control-Request-Headers": "content-type",
+            "Access-Control-Request-Headers": "content-type, x-csrf-token",
         },
     )
     assert response.status_code == 200
@@ -118,12 +121,13 @@ async def test_cors_preflight(client):
 
 async def test_logout_clears_cookie_without_renewal(client, auth_service):
     token = new_token()
+    client.cookies.set("__Host-session", token, domain="api.example.com", path="/")
     response = await client.post(
-        "/api/v1/auth/logout", headers={**HEADERS, "Cookie": f"__Host-session={token}"}
+        "/api/v1/auth/logout", headers=HEADERS
     )
     assert response.status_code == 204
     assert response.content == b""
-    assert len(response.headers.get_list("set-cookie")) == 1
+    assert len(response.headers.get_list("set-cookie")) == 2
     assert "Max-Age=0" in response.headers["set-cookie"]
     auth_service.logout.assert_awaited_once_with(token)
     auth_service.verify_session.assert_not_awaited()
@@ -174,6 +178,7 @@ async def test_logout_requires_authentication(client, auth_service):
 def test_api_has_only_basic_auth_routes(application):
     paths = {path for path in application.openapi()["paths"] if path.startswith("/api/v1/auth")}
     assert paths == {
+        "/api/v1/auth/csrf",
         "/api/v1/auth/register",
         "/api/v1/auth/login",
         "/api/v1/auth/me",
@@ -195,6 +200,7 @@ async def test_app_settings_control_cookies_and_cors(application):
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=application), base_url="http://localhost:8000"
     ) as client:
+        enable_csrf(client)
         response = await client.post(
             "/api/v1/auth/login", json=BODY, headers={"Origin": "http://localhost:3000"}
         )
